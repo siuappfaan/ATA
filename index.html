@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en" class="boot">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ATA Trainer</title>
+<meta name="theme-color" content="#f2f2f7">
+<meta name="color-scheme" content="light dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ATA Trainer">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+<script>
+  /* Apply the saved theme before first paint to avoid a flash. */
+  (function () {
+    try {
+      var s = JSON.parse(localStorage.getItem('ata.settings.v1') || '{}');
+      var t = s.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.dataset.theme = t;
+      document.documentElement.style.colorScheme = t;
+      var m = document.querySelector('meta[name="theme-color"]');
+      if (m) m.content = t === 'dark' ? '#000000' : '#f2f2f7';
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<div id="splash"><div class="logo" data-logo></div></div>
+
+<div id="app">
+
+  <!-- TRAIN -->
+  <section class="view active" id="v-train" aria-label="Train">
+    <div class="nav"><span class="nav-title">Train</span></div>
+    <div class="body">
+      <h1 class="large">Train</h1>
+      <div class="card setup">
+        <div class="field">
+          <label>Aircraft</label>
+          <div class="seg" data-seg="aircraft"><span class="thumb"></span>
+            <button type="button" data-v="737">737</button>
+            <button type="button" data-v="787">787</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Chapters</label>
+          <div class="seg" data-seg="scope"><span class="thumb"></span>
+            <button type="button" data-v="main">Main only</button>
+            <button type="button" data-v="sub">With sub-chapters</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Answers</label>
+          <div class="seg" data-seg="style"><span class="thumb"></span>
+            <button type="button" data-v="choice">Choose</button>
+            <button type="button" data-v="type">Type it in</button>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section">Game</h2>
+      <button type="button" class="card game" data-game="n2t">
+        <span class="g-ico" data-icon="hash"></span>
+        <span class="g-txt"><span class="g-t">Number to title</span><span class="g-s">See the number, find the title</span></span>
+        <span class="g-best" data-best="n2t" hidden></span>
+        <span class="chev" data-icon="chev"></span>
+      </button>
+      <button type="button" class="card game" data-game="t2n">
+        <span class="g-ico" data-icon="lines"></span>
+        <span class="g-txt"><span class="g-t">Title to number</span><span class="g-s">See the title, find the number</span></span>
+        <span class="g-best" data-best="t2n" hidden></span>
+        <span class="chev" data-icon="chev"></span>
+      </button>
+      <div class="foot"></div>
+    </div>
+  </section>
+
+  <!-- CHAPTERS -->
+  <section class="view" id="v-chapters" aria-label="Chapters">
+    <div class="nav"><span class="nav-title">Chapters</span><button type="button" class="nav-action" data-act="expand" id="expand-btn">Expand all</button></div>
+    <div class="body">
+      <h1 class="large">Chapters</h1>
+      <div class="seg" data-seg="aircraft"><span class="thumb"></span>
+        <button type="button" data-v="737">737</button>
+        <button type="button" data-v="787">787</button>
+      </div>
+      <p class="caption" id="ch-count"></p>
+      <div class="card list" id="ch-list"></div>
+      <div class="foot"></div>
+    </div>
+  </section>
+
+  <!-- SEARCH -->
+  <section class="view" id="v-search" aria-label="Search">
+    <div class="nav"><span class="nav-title">Search</span></div>
+    <div class="body">
+      <h1 class="large">Search</h1>
+      <div class="sbar" id="sbar">
+        <span class="si" data-icon="search"></span>
+        <input id="s-input" type="search" placeholder="Number or title" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Search ATA chapters">
+        <button type="button" class="clear" id="s-clear" aria-label="Clear search" data-icon="clear"></button>
+      </div>
+      <div class="seg" data-seg="aircraft"><span class="thumb"></span>
+        <button type="button" data-v="737">737</button>
+        <button type="button" data-v="787">787</button>
+      </div>
+      <div id="s-results"></div>
+      <div class="foot"></div>
+    </div>
+  </section>
+
+  <!-- TAB BAR -->
+  <nav class="tabbar" id="tabbar" aria-label="Main">
+    <span class="tab-ind"></span>
+    <button type="button" data-tab="train" class="on"><span data-icon="bolt"></span><span>Train</span></button>
+    <button type="button" data-tab="chapters"><span data-icon="list"></span><span>Chapters</span></button>
+    <button type="button" data-tab="search"><span data-icon="search"></span><span>Search</span></button>
+  </nav>
+
+  <!-- QUIZ -->
+  <div id="quiz" aria-hidden="true">
+    <div class="q-top">
+      <button type="button" class="q-close" id="q-close" aria-label="Close" data-icon="x"></button>
+      <span class="q-count" id="q-count"></span>
+      <span class="q-chip" id="q-chip"></span>
+    </div>
+    <div class="q-dots" id="q-dots"></div>
+    <div class="q-play" id="q-play">
+      <div class="q-stage" id="q-stage"></div>
+      <div class="q-bottom" id="q-bottom"></div>
+    </div>
+    <div class="q-result" id="q-result"></div>
+  </div>
+
+  <!-- What's new sheet -->
+  <div class="layer" id="sheet" hidden>
+    <div class="back" data-close></div>
+    <div class="panel" role="dialog" aria-label="What's new"></div>
+  </div>
+
+  <!-- End round confirmation -->
+  <div class="layer" id="confirm" hidden>
+    <div class="back" data-close></div>
+    <div class="panel actions">
+      <div class="act-group">
+        <div class="act-msg"><strong>End this round?</strong><span>Your progress in this round will be lost.</span></div>
+        <button type="button" class="act-btn danger" data-act="end-round">End round</button>
+      </div>
+      <button type="button" class="act-btn cancel" data-close>Keep playing</button>
+    </div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
