@@ -1,7 +1,7 @@
 /* ATA Trainer service worker.
    Keep VERSION in step with APP_VERSION in app.js: a new version re-caches everything
    and the app reloads itself once the new worker takes over. */
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const CACHE = 'ata-trainer-' + VERSION;
 const ASSETS = [
   './',

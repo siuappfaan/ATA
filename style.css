@@ -329,3 +329,33 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 4px; paddi
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Options row */
+.setup .opts-field { margin-top: 16px; border-top: .5px solid var(--sep); }
+.opt-row { display: flex; align-items: center; width: 100%; padding: 14px 0 0; }
+.opt-row .o-l { font-size: 16px; font-weight: 500; }
+.opt-row .o-v { flex: 1; text-align: right; margin-right: 8px; color: var(--label2); font-size: 15px; font-variant-numeric: tabular-nums; }
+.opt-row .chev { transition: transform .4s var(--ease); }
+.opt-row[aria-expanded="true"] .chev { transform: rotate(90deg); }
+#opts-detail { padding-top: 14px; }
+
+/* Progress bar for long rounds */
+.q-dots.bar { padding: 0 20px; }
+.q-bar { flex: 1; height: 5px; border-radius: 3px; background: var(--fill2); overflow: hidden; }
+.q-bar b { display: block; height: 100%; width: 0; border-radius: 3px; background: var(--accent); transition: width .5s var(--ease); }
+.ring-t.sm { padding-top: 78px; }
+.ring-t.sm b { font-size: 44px; }
+.ring-t.sm span { font-size: 18px; }
+
+/* First-letter hint */
+.q-hint { margin-top: 14px; font-size: 15px; color: var(--label2); max-height: 0; opacity: 0; overflow: hidden; transition: max-height .45s var(--ease), opacity .3s; }
+.q-hint.show { max-height: 34px; opacity: 1; }
+.q-hint b { font-family: var(--rounded); font-size: 20px; color: var(--accent); margin-left: 4px; }
+.q-tools { display: flex; justify-content: flex-end; padding-bottom: 8px; }
+.hint-tog { display: flex; align-items: center; gap: 9px; padding: 4px 2px; font-size: 14px; font-weight: 500; color: var(--label2); }
+.hint-tog .sw { position: relative; width: 38px; height: 23px; border-radius: 99px; background: var(--fill2); transition: background .3s; }
+.hint-tog .sw i { position: absolute; top: 2px; left: 2px; width: 19px; height: 19px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .4s var(--ease); }
+.hint-tog[aria-pressed="true"] { color: var(--label); }
+.hint-tog[aria-pressed="true"] .sw { background: var(--green); }
+.hint-tog[aria-pressed="true"] .sw i { transform: translateX(15px); }
+.r-actions .q-row { gap: 8px; }

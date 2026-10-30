@@ -2,8 +2,17 @@
   'use strict';
 
   /* Keep APP_VERSION in step with VERSION in sw.js */
-  const APP_VERSION = '1.1.0';
+  const APP_VERSION = '1.2.0';
   const CHANGELOG = [
+    {
+      v: '1.2.0', d: '30 Oct 2026', n: [
+        'Train is now Quiz, and Game is now Mode',
+        'Choose 5, 10, 20 or all questions per round, in a new Options row that stays tucked away',
+        'ATA order: go through a range or category in sequence',
+        'First-letter hint toggle in type-it-in mode',
+        'Practice your missed questions at the end of a round'
+      ]
+    },
     {
       v: '1.1.0', d: '30 Oct 2026', n: [
         'Practice a range: by category (engines, avionics, mechanical, structures and more), a custom chapter range, or one chapter\u2019s sub-chapters',
@@ -24,7 +33,6 @@
       ]
     }
   ];
-  const ROUNDS = 10;
 
   /* ---------- helpers ---------- */
   const $ = (s, r) => (r || document).querySelector(s);
@@ -78,7 +86,7 @@
 
   /* ---------- settings + theme ---------- */
   const SKEY = 'ata.settings.v1', BKEY = 'ata.best.v1';
-  const S = Object.assign({ aircraft: '737', scope: 'main', style: 'choice', theme: null, range: 'all', cats: [], from: '', to: '', one: '21' }, store.get(SKEY, {}));
+  const S = Object.assign({ aircraft: '737', scope: 'main', style: 'choice', theme: null, range: 'all', cats: [], from: '', to: '', one: '21', len: '10', order: 'random', hint: false }, store.get(SKEY, {}));
   const best = store.get(BKEY, {});
   const persist = () => store.set(SKEY, S);
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -147,7 +155,16 @@
     return '';
   }
   const effScope = () => (S.range === 'single' ? 'sub' : S.scope);
-  const bestKey = (g, ac, scope, style, rk) => [ac, g, scope, style].concat(rk ? [rk] : []).join('|');
+  const optKey = (len, order) => [len !== '10' ? 'n' + len : '', order === 'ata' ? 'ata' : ''].filter(Boolean).join('+');
+  const bestKey = (g, ac, scope, style, rk, len, order) => {
+    const o = optKey(len || '10', order || 'random');
+    return [ac, g, scope, style].concat(rk ? [rk] : []).concat(o ? [o] : []).join('|');
+  };
+  const getBest = (key) => { const v = best[key]; if (v === undefined) return undefined; return typeof v === 'object' ? v : { s: v, t: 10 }; };
+  function updateOpts() {
+    $('#opt-sum').textContent = (S.len === 'all' ? 'All questions' : S.len + ' questions') + ' \u00b7 ' + (S.order === 'ata' ? 'ATA order' : 'Random');
+    $('#order-note').textContent = S.order === 'ata' ? (S.len === 'all' ? 'Goes through your whole range in sequence.' : 'A run of consecutive chapters from your range. Choose All to go through the whole range.') : '';
+  }
   function pool() {
     const out = [], single = S.range === 'single';
     rangeChapters().forEach((c) => {
@@ -245,13 +262,13 @@
     handle.addEventListener('pointerup', end); handle.addEventListener('pointercancel', end);
   }
 
-  /* ---------- Train ---------- */
+  /* ---------- Quiz tab ---------- */
   function renderTrain() {
     ['n2t', 't2n'].forEach((g) => {
-      const b = best[bestKey(g, S.aircraft, effScope(), S.style, rkey())];
+      const b = getBest(bestKey(g, S.aircraft, effScope(), S.style, rkey(), S.len, S.order));
       const el = $('[data-best="' + g + '"]');
-      el.hidden = b === undefined;
-      if (b !== undefined) el.textContent = 'Best ' + b + '/' + ROUNDS;
+      el.hidden = !b;
+      if (b) el.textContent = 'Best ' + b.s + '/' + b.t;
     });
   }
 
@@ -347,12 +364,21 @@
   }
 
   /* ---------- Quiz ---------- */
-  const Q = { on: false, done: false, game: '', cfg: null, qs: [], i: 0, score: 0, log: [], locked: false, advancing: false, typed: false, state: 'answering', timer: 0, swapT: 0 };
+  const Q = { on: false, done: false, retry: false, game: '', cfg: null, qs: [], i: 0, score: 0, log: [], locked: false, advancing: false, typed: false, state: 'answering', timer: 0, swapT: 0 };
   const quiz = $('#quiz'), stage = $('#q-stage'), bottom = $('#q-bottom');
 
-  function buildQuestions(game) {
+  function pickItems() {
+    const P = pool(), n = S.len === 'all' ? P.length : Math.min(+S.len, P.length);
+    if (S.order === 'ata') {
+      if (n >= P.length) return P;
+      const start = Math.floor(Math.random() * (P.length - n + 1));
+      return P.slice(start, start + n);
+    }
+    return shuffle(P).slice(0, n);
+  }
+  function buildQuestions(game, items) {
     const P = pool(), ALL = allItems();
-    return shuffle(P).slice(0, Math.min(ROUNDS, P.length)).map((it) => {
+    return items.map((it) => {
       const cand = shuffle(P.filter((x) => x.sub === it.sub && x.num !== it.num)).concat(shuffle(ALL.filter((x) => x.sub === it.sub && x.num !== it.num)));
       const key = game === 'n2t' ? 'title' : 'num';
       const seen = new Set([it[key]]), d = [];
@@ -364,10 +390,20 @@
 
   function startQuiz(game) {
     if (!rangeOk()) return;
-    Object.assign(Q, { on: true, done: false, game, cfg: { aircraft: S.aircraft, scope: effScope(), style: S.style, range: S.range, rtext: rangeText(), rk: rkey() }, qs: buildQuestions(game), i: 0, score: 0, log: [], locked: false, advancing: false, typed: S.style === 'type', state: 'answering' });
+    begin(game, pickItems(), false);
+  }
+  function buildDots(n) {
+    const d = $('#q-dots');
+    if (n <= 20) { d.className = 'q-dots'; d.innerHTML = new Array(n + 1).join('<i></i>'); }
+    else { d.className = 'q-dots bar'; d.innerHTML = '<div class="q-bar"><b></b></div>'; }
+  }
+  function begin(game, items, retry) {
+    if (!items.length) return;
+    const cfg = retry ? Q.cfg : { aircraft: S.aircraft, scope: effScope(), style: S.style, range: S.range, rtext: rangeText(), rk: rkey(), len: S.len, order: S.order };
+    Object.assign(Q, { on: true, done: false, retry, game, cfg, qs: buildQuestions(game, items), i: 0, score: 0, log: [], locked: false, advancing: false, typed: cfg.style === 'type', state: 'answering' });
     clearTimeout(Q.timer);
-    $('#q-chip').textContent = S.aircraft;
-    $('#q-dots').innerHTML = Q.qs.map(() => '<i></i>').join('');
+    $('#q-chip').textContent = cfg.aircraft;
+    buildDots(Q.qs.length);
     $('#q-result').classList.remove('show');
     $('#q-play').classList.remove('gone');
     bottom.innerHTML = Q.typed ? formHTML() : '';
@@ -376,7 +412,12 @@
     if (Q.typed) { const inp = $('#q-input'); if (inp) inp.focus({ preventScroll: true }); }
   }
 
-  function stageHTML(it) {
+  function hintHTML(it) {
+    if (!Q.typed) return '';
+    return '<div class="q-hint' + (S.hint ? ' show' : '') + '" id="q-hint">Starts with <b>' + esc(answerOf(it).trim().charAt(0).toUpperCase()) + '</b></div>';
+  }
+  function stageHTML(it) { return stageBody(it) + hintHTML(it); }
+  function stageBody(it) {
     if (Q.game === 'n2t') return '<div class="q-label">' + (it.sub ? 'ATA sub-chapter' : 'ATA chapter') + '</div><div class="q-big">' + esc(it.num) + '</div>';
     return '<div class="q-label">' + (it.sub ? 'ATA sub-chapter title' : 'ATA chapter title') + '</div><div class="q-title">' + esc(it.title) + '</div>' + (it.sub ? '<div class="q-ctx">in ' + esc(it.parent) + '</div>' : '');
   }
@@ -390,6 +431,7 @@
     const numeric = !n2t && Q.cfg.scope === 'main';
     const ph = n2t ? 'Type the title' : (Q.cfg.scope === 'sub' ? 'Number, like 21-30' : 'Chapter number');
     return '<form class="q-form" id="q-form" autocomplete="off" novalidate>' +
+      '<div class="q-tools"><button type="button" class="hint-tog" id="hint-tog" data-act="hint" aria-pressed="' + !!S.hint + '">First letter<span class="sw"><i></i></span></button></div>' +
       '<input id="q-input" class="q-input" type="text"' + (numeric ? ' inputmode="numeric"' : '') + ' enterkeyhint="done" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" placeholder="' + ph + '" aria-label="Your answer">' +
       '<div class="q-msg" id="q-msg" aria-live="polite"></div>' +
       '<div class="q-row"><button type="button" class="btn sec" data-act="idk">I don\u2019t know</button><button type="submit" class="btn primary" id="q-go">Check</button></div></form>';
@@ -430,7 +472,8 @@
     const q = Q.qs[Q.i];
     Q.log.push({ it: q.it, ok, given });
     if (ok) Q.score++;
-    const dot = $$('#q-dots i')[Q.i]; dot.classList.remove('cur'); dot.classList.add(ok ? 'ok' : 'no');
+    const dot = $$('#q-dots i')[Q.i]; if (dot) { dot.classList.remove('cur'); dot.classList.add(ok ? 'ok' : 'no'); }
+    const bar = $('#q-dots .q-bar b'); if (bar) bar.style.width = ((Q.i + 1) / Q.qs.length * 100) + '%';
     if (!ok) vibrate(30);
     if (ok && auto) Q.timer = setTimeout(next, Q.typed ? 900 : 800);
     else showNext();
@@ -498,18 +541,21 @@
   function showResult() {
     Q.done = true;
     const total = Q.qs.length, score = Q.score;
-    const key = bestKey(Q.game, Q.cfg.aircraft, Q.cfg.scope, Q.cfg.style, Q.cfg.rk);
-    const prev = best[key];
-    const improved = prev !== undefined && score > prev;
-    if (prev === undefined || score > prev) { best[key] = score; store.set(BKEY, best); }
+    const key = bestKey(Q.game, Q.cfg.aircraft, Q.cfg.scope, Q.cfg.style, Q.cfg.rk, Q.cfg.len, Q.cfg.order);
+    const prev = getBest(key);
+    let improved = false;
+    if (!Q.retry && (!prev || score / total > prev.s / prev.t)) { improved = !!prev; best[key] = { s: score, t: total }; store.set(BKEY, best); }
+    const shown = getBest(key) || { s: score, t: total };
     const ratio = score / total;
     const color = ratio >= .8 ? 'var(--green)' : ratio >= .5 ? 'var(--accent)' : 'var(--orange)';
-    const head = score === total ? 'Perfect round' : ratio >= .8 ? 'Excellent' : ratio >= .6 ? 'Good work' : ratio >= .4 ? 'Getting there' : 'Keep going';
+    const head = Q.retry && score === total ? 'All cleared' : score === total ? 'Perfect round' : ratio >= .8 ? 'Excellent' : ratio >= .6 ? 'Good work' : ratio >= .4 ? 'Getting there' : 'Keep going';
     const gameName = Q.game === 'n2t' ? 'Number to title' : 'Title to number';
     const bits = [Q.cfg.aircraft, gameName];
     if (Q.cfg.rtext) bits.push(Q.cfg.rtext);
     if (Q.cfg.range !== 'single') bits.push(Q.cfg.scope === 'sub' ? 'with sub-chapters' : 'main chapters');
+    if (Q.cfg.order === 'ata') bits.push('ATA order');
     bits.push(Q.cfg.style === 'type' ? 'typed' : 'multiple choice');
+    if (Q.retry) bits.push('missed questions');
     const missed = Q.log.filter((l) => !l.ok);
     const C = 2 * Math.PI * 84;
     const review = missed.length ?
@@ -520,10 +566,12 @@
       }).join('') + '</div>' : '';
     $('#q-result').innerHTML =
       '<div class="r-scroll">' +
-      '<div class="ring"><svg viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="84"/><circle class="val" id="r-val" cx="100" cy="100" r="84" stroke="' + color + '" stroke-dasharray="' + C + '" stroke-dashoffset="' + C + '"/></svg><div class="ring-t"><b id="r-num">0</b><span>/' + total + '</span></div></div>' +
+      '<div class="ring"><svg viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="84"/><circle class="val" id="r-val" cx="100" cy="100" r="84" stroke="' + color + '" stroke-dasharray="' + C + '" stroke-dashoffset="' + C + '"/></svg><div class="ring-t' + (total > 99 ? ' sm' : '') + '"><b id="r-num">0</b><span>/' + total + '</span></div></div>' +
       '<div class="r-head">' + head + '</div><div class="r-sub">' + esc(bits.join(' \u00b7 ')) + '</div>' +
-      '<div class="r-best' + (improved ? ' new' : '') + '">' + (improved ? 'New best' : 'Best ' + best[key] + '/' + total) + '</div>' + review + '</div>' +
-      '<div class="r-actions"><button type="button" class="btn primary" data-act="again">Play again</button><button type="button" class="btn sec" data-act="done">Done</button></div>';
+      (Q.retry ? '' : '<div class="r-best' + (improved ? ' new' : '') + '">' + (improved ? 'New best' : 'Best ' + shown.s + '/' + shown.t) + '</div>') + review + '</div>' +
+      '<div class="r-actions">' + (missed.length ?
+        '<button type="button" class="btn primary" data-act="retry">Practice missed (' + missed.length + ')</button><div class="q-row"><button type="button" class="btn sec" data-act="again">Play again</button><button type="button" class="btn sec" data-act="done">Done</button></div>' :
+        '<button type="button" class="btn primary" data-act="again">Play again</button><button type="button" class="btn sec" data-act="done">Done</button>') + '</div>';
     $('#q-count').textContent = 'Results';
     swap(() => { $('#q-play').classList.add('gone'); $('#q-result').classList.add('show'); }, true);
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -569,6 +617,7 @@
       S[key] = v; persist(); syncSegs(key);
       if (key === 'aircraft') { fixRange(); persist(); renderChapters(); renderSearch(); renderRange(); }
       else if (key === 'range') renderRange();
+      else if (key === 'len' || key === 'order') updateOpts();
       renderTrain();
     }
     else if ((el = t.closest('[data-theme-toggle]'))) {
@@ -591,6 +640,13 @@
       if (a === 'next') next();
       else if (a === 'idk') { giveUp(); focusInput(); }
       else if (a === 'expand') toggleAll();
+      else if (a === 'hint') {
+        S.hint = !S.hint; persist(); el.setAttribute('aria-pressed', S.hint);
+        const hh = $('#q-hint'); if (hh) hh.classList.toggle('show', S.hint);
+        focusInput();
+      }
+      else if (a === 'toggle-opts') { const w = $('#opts-wrap'), open = !w.classList.contains('open'); w.classList.toggle('open', open); el.setAttribute('aria-expanded', open); }
+      else if (a === 'retry') { const items = Q.log.filter((l) => !l.ok).map((l) => l.it); begin(Q.game, Q.cfg.order === 'ata' ? items : shuffle(items), true); }
       else if (a === 'again') startQuiz(Q.game);
       else if (a === 'done') closeQuiz();
       else if (a === 'end-round') { closeLayer($('#confirm')); closeQuiz(); }
@@ -612,7 +668,8 @@
   /* ---------- boot ---------- */
   applyTheme();
   fixRange();
-  ['aircraft', 'range', 'scope', 'style'].forEach(syncSegs);
+  ['aircraft', 'range', 'scope', 'style', 'len', 'order'].forEach(syncSegs);
+  updateOpts();
   renderRange();
   buildSheet();
   renderTrain(); renderChapters(); renderSearch();

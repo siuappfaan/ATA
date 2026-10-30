@@ -35,10 +35,10 @@
 <div id="app">
 
   <!-- TRAIN -->
-  <section class="view active" id="v-train" aria-label="Train">
-    <div class="nav"><span class="nav-title">Train</span></div>
+  <section class="view active" id="v-train" aria-label="Quiz">
+    <div class="nav"><span class="nav-title">Quiz</span></div>
     <div class="body">
-      <h1 class="large">Train</h1>
+      <h1 class="large">Quiz</h1>
       <div class="card setup">
         <div class="field">
           <label>Aircraft</label>
@@ -73,9 +73,29 @@
             <button type="button" data-v="type">Type it in</button>
           </div>
         </div>
+        <div class="field opts-field">
+          <button type="button" class="opt-row" data-act="toggle-opts" aria-expanded="false">
+            <span class="o-l">Options</span><span class="o-v" id="opt-sum"></span><span class="chev" data-icon="chev"></span>
+          </button>
+          <div class="collapse" id="opts-wrap"><div><div id="opts-detail">
+            <label>Questions</label>
+            <div class="seg" data-seg="len"><span class="thumb"></span>
+              <button type="button" data-v="5">5</button>
+              <button type="button" data-v="10">10</button>
+              <button type="button" data-v="20">20</button>
+              <button type="button" data-v="all">All</button>
+            </div>
+            <label style="margin-top:14px">Order</label>
+            <div class="seg" data-seg="order"><span class="thumb"></span>
+              <button type="button" data-v="random">Random</button>
+              <button type="button" data-v="ata">ATA order</button>
+            </div>
+            <p class="r-note" id="order-note"></p>
+          </div></div></div>
+        </div>
       </div>
 
-      <h2 class="section">Game</h2>
+      <h2 class="section">Mode</h2>
       <button type="button" class="card game" data-game="n2t">
         <span class="g-ico" data-icon="hash"></span>
         <span class="g-txt"><span class="g-t">Number to title</span><span class="g-s">See the number, find the title</span></span>
@@ -129,7 +149,7 @@
   <!-- TAB BAR -->
   <nav class="tabbar" id="tabbar" aria-label="Main">
     <span class="tab-ind"></span>
-    <button type="button" data-tab="train" class="on"><span data-icon="bolt"></span><span>Train</span></button>
+    <button type="button" data-tab="train" class="on"><span data-icon="bolt"></span><span>Quiz</span></button>
     <button type="button" data-tab="chapters"><span data-icon="list"></span><span>Chapters</span></button>
     <button type="button" data-tab="search"><span data-icon="search"></span><span>Search</span></button>
   </nav>
