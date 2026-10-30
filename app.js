@@ -2,8 +2,16 @@
   'use strict';
 
   /* Keep APP_VERSION in step with VERSION in sw.js */
-  const APP_VERSION = '1.0.1';
+  const APP_VERSION = '1.1.0';
   const CHANGELOG = [
+    {
+      v: '1.1.0', d: '30 Oct 2026', n: [
+        'Practice a range: by category (engines, avionics, mechanical, structures and more), a custom chapter range, or one chapter\u2019s sub-chapters',
+        '787 chapters and sub-chapters updated to your supplied list',
+        'Dark and light mode is now a single button in the top corner of this panel'
+      ]
+    },
+    { v: '1.0.2', d: '30 Oct 2026', n: ['737 chapters and sub-chapters updated to your supplied list, including chapters 00, 46, 47 and 83'] },
     { v: '1.0.1', d: '21 Oct 2026', n: ['Icons now sit alongside the other files, with no separate folder'] },
     {
       v: '1.0.0', d: '21 Oct 2026', n: [
@@ -70,7 +78,7 @@
 
   /* ---------- settings + theme ---------- */
   const SKEY = 'ata.settings.v1', BKEY = 'ata.best.v1';
-  const S = Object.assign({ aircraft: '737', scope: 'main', style: 'choice', theme: null }, store.get(SKEY, {}));
+  const S = Object.assign({ aircraft: '737', scope: 'main', style: 'choice', theme: null, range: 'all', cats: [], from: '', to: '', one: '21' }, store.get(SKEY, {}));
   const best = store.get(BKEY, {});
   const persist = () => store.set(SKEY, S);
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -79,7 +87,7 @@
   function syncSegs(key) {
     $$('.seg[data-seg="' + key + '"]').forEach((seg) => {
       const btns = $$('button', seg);
-      const val = key === 'theme' ? theme() : S[key];
+      const val = S[key];
       const idx = Math.max(0, btns.findIndex((b) => b.dataset.v === val));
       seg.style.setProperty('--n', btns.length);
       seg.style.setProperty('--i', idx);
@@ -91,19 +99,95 @@
     document.documentElement.dataset.theme = t;
     document.documentElement.style.colorScheme = t;
     const m = $('meta[name="theme-color"]'); if (m) m.content = t === 'dark' ? '#000000' : '#f2f2f7';
-    syncSegs('theme');
   }
   if (mq.addEventListener) mq.addEventListener('change', () => { if (!S.theme) applyTheme(); });
 
   /* ---------- data ---------- */
   const chapters = () => window.getChapters(S.aircraft);
+  const GROUPS = [
+    { id: 'gen', label: 'General', nums: ['00', '05', '06', '07', '08', '09', '10', '11', '12', '20'] },
+    { id: 'env', label: 'Air & Environment', nums: ['21', '30', '35', '36', '38'] },
+    { id: 'avi', label: 'Avionics', nums: ['22', '23', '31', '34', '42', '45', '46'] },
+    { id: 'ele', label: 'Electrical', nums: ['24', '33'] },
+    { id: 'mec', label: 'Mechanical', nums: ['27', '29', '32'] },
+    { id: 'fue', label: 'Fuel & Fire', nums: ['26', '28', '47'] },
+    { id: 'cab', label: 'Cabin', nums: ['25', '44'] },
+    { id: 'str', label: 'Structures', nums: ['51', '52', '53', '54', '55', '56', '57'] },
+    { id: 'eng', label: 'Engines & APU', nums: ['49', '70', '71', '72', '73', '74', '75', '76', '77', '78', '79', '80', '83'] }
+  ];
+  function fixRange() {
+    const nums = chapters().map((c) => c.num);
+    if (nums.indexOf(S.from) < 0) S.from = nums[0];
+    if (nums.indexOf(S.to) < 0) S.to = nums[nums.length - 1];
+    if (nums.indexOf(S.one) < 0) S.one = nums.indexOf('21') > -1 ? '21' : nums[0];
+    if (S.from > S.to) { const t = S.from; S.from = S.to; S.to = t; }
+  }
+  function rangeChapters() {
+    const chs = chapters();
+    if (S.range === 'cat') {
+      const set = new Set();
+      GROUPS.forEach((g) => { if (S.cats.indexOf(g.id) > -1) g.nums.forEach((n) => set.add(n)); });
+      return chs.filter((c) => set.has(c.num));
+    }
+    if (S.range === 'custom') return chs.filter((c) => c.num >= S.from && c.num <= S.to);
+    if (S.range === 'single') return chs.filter((c) => c.num === S.one);
+    return chs;
+  }
+  const rangeOk = () => rangeChapters().length > 0;
+  function rkey() {
+    if (S.range === 'cat') return 'cat:' + S.cats.slice().sort().join(',');
+    if (S.range === 'custom') return 'rng:' + S.from + '-' + S.to;
+    if (S.range === 'single') return 'one:' + S.one;
+    return '';
+  }
+  function rangeText() {
+    if (S.range === 'cat') return GROUPS.filter((g) => S.cats.indexOf(g.id) > -1).map((g) => g.label).join(', ');
+    if (S.range === 'custom') return 'Chapters ' + S.from + '\u2013' + S.to;
+    if (S.range === 'single') return 'Chapter ' + S.one + ' sub-chapters';
+    return '';
+  }
+  const effScope = () => (S.range === 'single' ? 'sub' : S.scope);
+  const bestKey = (g, ac, scope, style, rk) => [ac, g, scope, style].concat(rk ? [rk] : []).join('|');
   function pool() {
+    const out = [], single = S.range === 'single';
+    rangeChapters().forEach((c) => {
+      if (!single) out.push({ num: c.num, title: c.title, sub: false, parent: null });
+      if (single || S.scope === 'sub') c.subs.forEach((s) => { if (single || !/-00$/.test(s.num)) out.push({ num: s.num, title: s.title, sub: true, parent: c.title }); });
+    });
+    return out;
+  }
+  function allItems() {
     const out = [];
     chapters().forEach((c) => {
       out.push({ num: c.num, title: c.title, sub: false, parent: null });
-      if (S.scope === 'sub') c.subs.forEach((s) => { if (!/-00$/.test(s.num)) out.push({ num: s.num, title: s.title, sub: true, parent: c.title }); });
+      c.subs.forEach((s) => out.push({ num: s.num, title: s.title, sub: true, parent: c.title }));
     });
     return out;
+  }
+
+  /* ---------- practice range controls ---------- */
+  function updateRangeState() {
+    const chs = rangeChapters(), subs = chs.reduce((a, c) => a + c.subs.length, 0), ok = chs.length > 0;
+    let note = '';
+    if (S.range === 'cat') note = ok ? chs.length + (chs.length === 1 ? ' chapter' : ' chapters') + (chs.length <= 10 ? ' (' + chs.map((c) => c.num).join(', ') + ')' : '') + ' \u00b7 ' + subs + ' sub-chapters' : 'Select at least one category';
+    else if (S.range === 'custom') note = chs.length + (chs.length === 1 ? ' chapter' : ' chapters') + ' \u00b7 ' + subs + ' sub-chapters';
+    else if (S.range === 'single') note = subs + ' sub-chapters to practice';
+    const n = $('#range-note'); if (n && S.range !== 'all') n.textContent = note;
+    $$('.game').forEach((g) => { g.classList.toggle('disabled', !ok); g.setAttribute('aria-disabled', !ok); });
+    $('#scope-wrap').classList.toggle('open', S.range !== 'single');
+    $('#range-wrap').classList.toggle('open', S.range !== 'all');
+  }
+  function renderRange() {
+    const box = $('#range-detail'), chs = chapters();
+    const opts = (val) => chs.map((c) => '<option value="' + c.num + '"' + (c.num === val ? ' selected' : '') + '>' + c.num + ' \u00b7 ' + esc(c.title) + '</option>').join('');
+    if (S.range === 'cat') {
+      box.innerHTML = '<div class="chips">' + GROUPS.map((g) => '<button type="button" class="chip' + (S.cats.indexOf(g.id) > -1 ? ' on' : '') + '" data-cat="' + g.id + '">' + g.label + '</button>').join('') + '</div><p class="r-note" id="range-note"></p>';
+    } else if (S.range === 'custom') {
+      box.innerHTML = '<div class="sel-row"><label class="selw"><span>From</span><select data-sel="from">' + opts(S.from) + '</select></label><label class="selw"><span>To</span><select data-sel="to">' + opts(S.to) + '</select></label></div><p class="r-note" id="range-note"></p>';
+    } else if (S.range === 'single') {
+      box.innerHTML = '<label class="selw"><span>Chapter</span><select data-sel="one">' + opts(S.one) + '</select></label><p class="r-note" id="range-note"></p>';
+    }
+    updateRangeState();
   }
 
   /* ---------- tabs + scroll chrome ---------- */
@@ -146,17 +230,12 @@
     const cur = CHANGELOG[0];
     $('#sheet .panel').innerHTML =
       '<div class="drag"><div class="grab"></div></div>' +
-      '<div class="sh-head"><h2>What\'s new</h2><button type="button" class="sh-done" data-close>Done</button></div>' +
-      '<p class="sh-ver">Version ' + APP_VERSION + ' &middot; Released ' + esc(cur.d) + '</p>' +
-      '<div class="sh-label">Appearance</div>' +
-      '<div class="seg" data-seg="theme"><span class="thumb"></span>' +
-      '<button type="button" data-v="light">' + I.sun + 'Light</button>' +
-      '<button type="button" data-v="dark">' + I.moon + 'Dark</button></div>' +
+      '<div class="sh-head"><div><h2>What\'s new</h2><p class="sh-ver">Version ' + APP_VERSION + ' &middot; Released ' + esc(cur.d) + '</p></div>' +
+      '<button type="button" class="theme-btn" data-theme-toggle aria-label="Switch between light and dark mode"><span class="ti sun">' + I.sun + '</span><span class="ti moon">' + I.moon + '</span></button></div>' +
       '<div class="log">' + CHANGELOG.map((c) => '<h3>' + esc(c.v) + ' <span style="color:var(--label2);font-weight:400">&middot; ' + esc(c.d) + '</span></h3><ul>' + c.n.map((n) => '<li>' + esc(n) + '</li>').join('') + '</ul>').join('') + '</div>';
-    syncSegs('theme');
     enableDrag($('#sheet'));
   }
-  function openChangelog() { openLayer($('#sheet')); }
+    function openChangelog() { openLayer($('#sheet')); }
   function enableDrag(layer) {
     const panel = $('.panel', layer), handle = $('.drag', panel);
     let sy = 0, dy = 0, drag = false;
@@ -169,7 +248,7 @@
   /* ---------- Train ---------- */
   function renderTrain() {
     ['n2t', 't2n'].forEach((g) => {
-      const b = best[[S.aircraft, g, S.scope, S.style].join('|')];
+      const b = best[bestKey(g, S.aircraft, effScope(), S.style, rkey())];
       const el = $('[data-best="' + g + '"]');
       el.hidden = b === undefined;
       if (b !== undefined) el.textContent = 'Best ' + b + '/' + ROUNDS;
@@ -272,24 +351,20 @@
   const quiz = $('#quiz'), stage = $('#q-stage'), bottom = $('#q-bottom');
 
   function buildQuestions(game) {
-    const P = pool();
+    const P = pool(), ALL = allItems();
     return shuffle(P).slice(0, Math.min(ROUNDS, P.length)).map((it) => {
-      const same = P.filter((x) => x.sub === it.sub && x !== it);
-      let opts;
-      if (game === 'n2t') {
-        const seen = new Set([it.title]), d = [];
-        for (const x of shuffle(same)) { if (!seen.has(x.title)) { seen.add(x.title); d.push(x.title); } if (d.length === 3) break; }
-        opts = shuffle([it.title].concat(d));
-      } else {
-        opts = shuffle([it.num].concat(shuffle(same).slice(0, 3).map((x) => x.num)));
-      }
-      return { it, opts };
+      const cand = shuffle(P.filter((x) => x.sub === it.sub && x.num !== it.num)).concat(shuffle(ALL.filter((x) => x.sub === it.sub && x.num !== it.num)));
+      const key = game === 'n2t' ? 'title' : 'num';
+      const seen = new Set([it[key]]), d = [];
+      for (const x of cand) { if (!seen.has(x[key])) { seen.add(x[key]); d.push(x[key]); } if (d.length === 3) break; }
+      return { it, opts: shuffle([it[key]].concat(d)) };
     });
   }
   const answerOf = (it) => (Q.game === 'n2t' ? it.title : it.num);
 
   function startQuiz(game) {
-    Object.assign(Q, { on: true, done: false, game, cfg: { aircraft: S.aircraft, scope: S.scope, style: S.style }, qs: buildQuestions(game), i: 0, score: 0, log: [], locked: false, advancing: false, typed: S.style === 'type', state: 'answering' });
+    if (!rangeOk()) return;
+    Object.assign(Q, { on: true, done: false, game, cfg: { aircraft: S.aircraft, scope: effScope(), style: S.style, range: S.range, rtext: rangeText(), rk: rkey() }, qs: buildQuestions(game), i: 0, score: 0, log: [], locked: false, advancing: false, typed: S.style === 'type', state: 'answering' });
     clearTimeout(Q.timer);
     $('#q-chip').textContent = S.aircraft;
     $('#q-dots').innerHTML = Q.qs.map(() => '<i></i>').join('');
@@ -423,7 +498,7 @@
   function showResult() {
     Q.done = true;
     const total = Q.qs.length, score = Q.score;
-    const key = [Q.cfg.aircraft, Q.game, Q.cfg.scope, Q.cfg.style].join('|');
+    const key = bestKey(Q.game, Q.cfg.aircraft, Q.cfg.scope, Q.cfg.style, Q.cfg.rk);
     const prev = best[key];
     const improved = prev !== undefined && score > prev;
     if (prev === undefined || score > prev) { best[key] = score; store.set(BKEY, best); }
@@ -431,7 +506,10 @@
     const color = ratio >= .8 ? 'var(--green)' : ratio >= .5 ? 'var(--accent)' : 'var(--orange)';
     const head = score === total ? 'Perfect round' : ratio >= .8 ? 'Excellent' : ratio >= .6 ? 'Good work' : ratio >= .4 ? 'Getting there' : 'Keep going';
     const gameName = Q.game === 'n2t' ? 'Number to title' : 'Title to number';
-    const bits = [Q.cfg.aircraft, gameName, Q.cfg.scope === 'sub' ? 'with sub-chapters' : 'main chapters', Q.cfg.style === 'type' ? 'typed' : 'multiple choice'];
+    const bits = [Q.cfg.aircraft, gameName];
+    if (Q.cfg.rtext) bits.push(Q.cfg.rtext);
+    if (Q.cfg.range !== 'single') bits.push(Q.cfg.scope === 'sub' ? 'with sub-chapters' : 'main chapters');
+    bits.push(Q.cfg.style === 'type' ? 'typed' : 'multiple choice');
     const missed = Q.log.filter((l) => !l.ok);
     const C = 2 * Math.PI * 84;
     const review = missed.length ?
@@ -487,19 +565,23 @@
     const t = e.target; let el;
     if ((el = t.closest('.seg button'))) {
       const seg = el.closest('.seg'), key = seg.dataset.seg, v = el.dataset.v;
-      if (key === 'theme') {
-        if (theme() === v) return;
-        document.documentElement.classList.add('theme-anim');
-        S.theme = v; applyTheme(); persist();
-        setTimeout(() => document.documentElement.classList.remove('theme-anim'), 450);
-        return;
-      }
       if (S[key] === v) return;
       S[key] = v; persist(); syncSegs(key);
-      if (key === 'aircraft') { renderChapters(); renderSearch(); }
+      if (key === 'aircraft') { fixRange(); persist(); renderChapters(); renderSearch(); renderRange(); }
+      else if (key === 'range') renderRange();
       renderTrain();
     }
-    else if ((el = t.closest('[data-game]'))) startQuiz(el.dataset.game);
+    else if ((el = t.closest('[data-theme-toggle]'))) {
+      document.documentElement.classList.add('theme-anim');
+      S.theme = theme() === 'dark' ? 'light' : 'dark'; applyTheme(); persist();
+      setTimeout(() => document.documentElement.classList.remove('theme-anim'), 450);
+    }
+    else if ((el = t.closest('[data-cat]'))) {
+      const id = el.dataset.cat, i = S.cats.indexOf(id);
+      if (i > -1) S.cats.splice(i, 1); else S.cats.push(id);
+      el.classList.toggle('on'); persist(); updateRangeState(); renderTrain();
+    }
+    else if ((el = t.closest('[data-game]'))) { if (!el.classList.contains('disabled')) startQuiz(el.dataset.game); }
     else if ((el = t.closest('[data-toggle]'))) toggleChapter(el.dataset.toggle);
     else if ((el = t.closest('[data-go]'))) goTo(el.dataset.go);
     else if ((el = t.closest('.tabbar button'))) setTab(el.dataset.tab);
@@ -517,12 +599,21 @@
     else if (t.closest('#q-close')) requestClose();
     else if (t.closest('#s-clear')) { const i = $('#s-input'); i.value = ''; renderSearch(); i.focus(); }
   });
+  document.addEventListener('change', (e) => {
+    const sel = e.target.closest && e.target.closest('[data-sel]'); if (!sel) return;
+    const k = sel.dataset.sel; S[k] = sel.value;
+    if (k === 'from' && S.from > S.to) { S.to = S.from; const o = $('[data-sel="to"]'); if (o) o.value = S.to; }
+    if (k === 'to' && S.from > S.to) { S.from = S.to; const o = $('[data-sel="from"]'); if (o) o.value = S.from; }
+    persist(); updateRangeState(); renderTrain();
+  });
   $('#s-input').addEventListener('input', renderSearch);
   $('#s-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
 
   /* ---------- boot ---------- */
   applyTheme();
-  ['aircraft', 'scope', 'style'].forEach(syncSegs);
+  fixRange();
+  ['aircraft', 'range', 'scope', 'style'].forEach(syncSegs);
+  renderRange();
   buildSheet();
   renderTrain(); renderChapters(); renderSearch();
   requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.classList.remove('boot')));

@@ -47,14 +47,26 @@
             <button type="button" data-v="787">787</button>
           </div>
         </div>
-        <div class="field">
-          <label>Chapters</label>
-          <div class="seg" data-seg="scope"><span class="thumb"></span>
-            <button type="button" data-v="main">Main only</button>
-            <button type="button" data-v="sub">With sub-chapters</button>
+        <div class="field pt">
+          <label>Practice</label>
+          <div class="seg" data-seg="range"><span class="thumb"></span>
+            <button type="button" data-v="all">All</button>
+            <button type="button" data-v="cat">Category</button>
+            <button type="button" data-v="custom">Custom</button>
+            <button type="button" data-v="single">Single</button>
           </div>
+          <div class="collapse" id="range-wrap"><div><div id="range-detail"></div></div></div>
         </div>
-        <div class="field">
+        <div class="collapse open" id="scope-wrap"><div>
+          <div class="field pt">
+            <label>Chapters</label>
+            <div class="seg" data-seg="scope"><span class="thumb"></span>
+              <button type="button" data-v="main">Main only</button>
+              <button type="button" data-v="sub">With sub-chapters</button>
+            </div>
+          </div>
+        </div></div>
+        <div class="field pt">
           <label>Answers</label>
           <div class="seg" data-seg="style"><span class="thumb"></span>
             <button type="button" data-v="choice">Choose</button>
